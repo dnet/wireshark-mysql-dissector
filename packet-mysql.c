@@ -142,6 +142,13 @@
 #define MYSQL_SET_OPTION          27
 #define MYSQL_STMT_FETCH          28
 
+/* MySQL cursor types */
+
+#define MYSQL_CURSOR_TYPE_NO_CURSOR  0
+#define MYSQL_CURSOR_TYPE_READ_ONLY  1
+#define MYSQL_CURSOR_TYPE_FOR_UPDATE 2
+#define MYSQL_CURSOR_TYPE_SCROLLABLE 4
+
 
 /* decoding table: command */
 static const value_string mysql_command_vals[] = {
@@ -177,6 +184,14 @@ static const value_string mysql_command_vals[] = {
 	{0, NULL}
 };
 
+/* decoding table: exec_flags */
+static const value_string mysql_exec_flags_vals[] = {
+	{MYSQL_CURSOR_TYPE_NO_CURSOR, "Defaults"},
+	{MYSQL_CURSOR_TYPE_READ_ONLY, "Read-only cursor"},
+	{MYSQL_CURSOR_TYPE_FOR_UPDATE, "Cursor for update"},
+	{MYSQL_CURSOR_TYPE_SCROLLABLE, "Scrollable cursor"},
+	{0, NULL}
+};
 
 /* charset: pre-4.1 used the term 'charset', later changed to 'collation' */
 static const value_string mysql_charset_vals[] = {
@@ -2011,8 +2026,8 @@ void proto_register_mysql(void)
 		NULL, HFILL }},
 
 		{ &hf_mysql_exec_flags,
-		{ "Flags (unused)", "mysql.exec_flags",
-		FT_UINT8, BASE_DEC, NULL, 0x0,
+		{ "Flags", "mysql.exec_flags",
+		FT_UINT8, BASE_DEC, VALS(mysql_exec_flags_vals), 0x0,
 		NULL, HFILL }},
 
 		{ &hf_mysql_exec_iter,
