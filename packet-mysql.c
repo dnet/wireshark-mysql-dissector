@@ -558,6 +558,7 @@ typedef struct mysql_conn_data
 #ifdef CTDEBUG
 	guint32 generation;
 #endif
+	guint8 major_version;
 } mysql_conn_data_t;
 
 struct mysql_frame_data {
@@ -753,6 +754,7 @@ mysql_dissect_greeting(tvbuff_t *tvb, packet_info *pinfo, int offset,
 {
 	gint protocol;
 	gint strlen;
+	int ver_offset;
 
 	proto_item *tf;
 	proto_item *greeting_tree= NULL;
@@ -783,6 +785,12 @@ mysql_dissect_greeting(tvbuff_t *tvb, packet_info *pinfo, int offset,
 		col_append_fstr(pinfo->cinfo, COL_INFO, " version=%s", tvb_get_ephemeral_string(tvb, offset, strlen));
 	}
 	proto_tree_add_item(greeting_tree, hf_mysql_version, tvb, offset, strlen, ENC_NA);
+	conn_data->major_version = 0;
+	for (ver_offset = 0; ver_offset < strlen; ver_offset++) {
+		guint8 ver_char = tvb_get_guint8(tvb, offset + ver_offset);
+		if (ver_char == '.') break;
+		conn_data->major_version = conn_data->major_version * 10 + ver_char - '0';
+	}
 	offset += strlen;
 
 	/* 4 bytes little endian thread_id */
