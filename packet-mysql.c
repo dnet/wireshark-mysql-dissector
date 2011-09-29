@@ -444,7 +444,8 @@ static int hf_mysql_option = -1;
 static int hf_mysql_num_rows = -1;
 static int hf_mysql_param = -1;
 static int hf_mysql_num_params = -1;
-static int hf_mysql_exec_flags = -1;
+static int hf_mysql_exec_flags4 = -1;
+static int hf_mysql_exec_flags5 = -1;
 static int hf_mysql_exec_iter = -1;
 static int hf_mysql_binlog_position = -1;
 static int hf_mysql_binlog_flags = -1;
@@ -1088,7 +1089,11 @@ mysql_dissect_request(tvbuff_t *tvb,packet_info *pinfo, int offset,
 		proto_tree_add_item(req_tree, hf_mysql_stmt_id, tvb, offset, 4, ENC_LITTLE_ENDIAN);
 		offset += 4;
 
-		proto_tree_add_item(req_tree, hf_mysql_exec_flags, tvb, offset, 1, ENC_NA);
+		if (conn_data->major_version >= 5) {
+			proto_tree_add_item(req_tree, hf_mysql_exec_flags5, tvb, offset, 1, ENC_NA);
+		} else {
+			proto_tree_add_item(req_tree, hf_mysql_exec_flags4, tvb, offset, 1, ENC_NA);
+		}
 		offset += 1;
 
 		proto_tree_add_item(req_tree, hf_mysql_exec_iter, tvb, offset, 4, ENC_LITTLE_ENDIAN);
@@ -2033,7 +2038,12 @@ void proto_register_mysql(void)
 		FT_UINT32, BASE_DEC, NULL, 0x0,
 		NULL, HFILL }},
 
-		{ &hf_mysql_exec_flags,
+		{ &hf_mysql_exec_flags4,
+		{ "Flags (unused)", "mysql.exec_flags",
+		FT_UINT8, BASE_DEC, NULL, 0x0,
+		NULL, HFILL }},
+
+		{ &hf_mysql_exec_flags5,
 		{ "Flags", "mysql.exec_flags",
 		FT_UINT8, BASE_DEC, VALS(mysql_exec_flags_vals), 0x0,
 		NULL, HFILL }},
