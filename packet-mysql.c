@@ -373,6 +373,7 @@ static gint ett_stat = -1;
 static gint ett_request = -1;
 static gint ett_refresh = -1;
 static gint ett_field_flags = -1;
+static gint ett_exec_param = -1;
 
 /* protocol fields */
 static int hf_mysql_caps_server = -1;
@@ -487,6 +488,19 @@ static int hf_mysql_fld_decimals = -1;
 static int hf_mysql_fld_default = -1;
 static int hf_mysql_row_text = -1;
 static int hf_mysql_new_parameter_bound_flag = -1;
+static int hf_mysql_exec_param = -1;
+static int hf_mysql_exec_unsigned = -1;
+static int hf_mysql_exec_field_longlong = -1;
+static int hf_mysql_exec_field_string = -1;
+static int hf_mysql_exec_field_double = -1;
+static int hf_mysql_exec_field_datetime_length = -1;
+static int hf_mysql_exec_field_year = -1;
+static int hf_mysql_exec_field_month = -1;
+static int hf_mysql_exec_field_day = -1;
+static int hf_mysql_exec_field_hour = -1;
+static int hf_mysql_exec_field_minute = -1;
+static int hf_mysql_exec_field_second = -1;
+static int hf_mysql_exec_field_second_b = -1;
 
 /* type constants */
 static const value_string type_constants[] =
@@ -929,6 +943,9 @@ mysql_dissect_request(tvbuff_t *tvb,packet_info *pinfo, int offset,
 	proto_item *req_tree = NULL;
 	gint stmt_id;
 	my_stmt_data_t *stmt_data;
+	guint8 stmt_bound, param_type, param_len, param_continue;
+	guint32 param_len32;
+	int stmt_pos, param_offset;
 
 	if (tree) {
 		tf = proto_tree_add_item(tree, hf_mysql_request, tvb, offset, 1, ENC_NA);
@@ -1115,7 +1132,96 @@ mysql_dissect_request(tvbuff_t *tvb,packet_info *pinfo, int offset,
 		if (stmt_data != NULL && stmt_data->nparam != 0) {
 			offset += (stmt_data->nparam + 7) / 8;
 			proto_tree_add_item(req_tree, hf_mysql_new_parameter_bound_flag, tvb, offset, 1, ENC_NA);
+			stmt_bound = tvb_get_guint8(tvb, offset);
 			offset += 1;
+			if (stmt_bound == 1) {
+				param_offset = offset + stmt_data->nparam * 2;
+				param_continue = 1;
+				for (stmt_pos = 0; stmt_pos < stmt_data->nparam; stmt_pos++) {
+					proto_item *tf;
+					proto_item *field_tree;
+					tf = proto_tree_add_item(req_tree, hf_mysql_exec_param, tvb, offset, 2, ENC_NA);
+					field_tree = proto_item_add_subtree(tf, ett_stat);
+					proto_tree_add_item(field_tree, hf_mysql_fld_type, tvb, offset, 1, ENC_NA);
+					param_type = tvb_get_guint8(tvb, offset);
+					offset += 1; /* type */
+					proto_tree_add_item(field_tree, hf_mysql_exec_unsigned, tvb, offset, 1, ENC_NA);
+					offset += 1; /* signedness */
+					switch (param_type) {
+						case 0x05: /* FIELD_TYPE_DOUBLE */
+							proto_tree_add_item(field_tree, hf_mysql_exec_field_double,
+									tvb, param_offset, 8, ENC_LITTLE_ENDIAN);
+							param_offset += 8;
+							break;
+						case 0x06: /* FIELD_TYPE_NULL */
+							break;
+						case 0x08: /* FIELD_TYPE_LONGLONG */
+							proto_tree_add_item(field_tree, hf_mysql_exec_field_longlong,
+									tvb, param_offset, 8, ENC_LITTLE_ENDIAN);
+							param_offset += 8;
+							break;
+						case 0x0a: /* FIELD_TYPE_DATE */
+						case 0x0c: /* FIELD_TYPE_DATETIME */
+							proto_tree_add_item(field_tree, hf_mysql_exec_field_datetime_length,
+									tvb, param_offset, 1, ENC_NA);
+							param_len = tvb_get_guint8(tvb, param_offset);
+							param_offset += 1;
+							if (param_len >= 2) {
+								proto_tree_add_item(field_tree, hf_mysql_exec_field_year,
+										tvb, param_offset, 2, ENC_LITTLE_ENDIAN);
+							}
+							if (param_len >= 4) {
+								proto_tree_add_item(field_tree, hf_mysql_exec_field_month,
+										tvb, param_offset + 2, 1, ENC_NA);
+								proto_tree_add_item(field_tree, hf_mysql_exec_field_day,
+										tvb, param_offset + 3, 1, ENC_NA);
+							}
+							if (param_len >= 7) {
+								proto_tree_add_item(field_tree, hf_mysql_exec_field_hour,
+										tvb, param_offset + 4, 1, ENC_NA);
+								proto_tree_add_item(field_tree, hf_mysql_exec_field_minute,
+										tvb, param_offset + 5, 1, ENC_NA);
+								proto_tree_add_item(field_tree, hf_mysql_exec_field_second,
+										tvb, param_offset + 6, 1, ENC_NA);
+							}
+							if (param_len >= 11) {
+								proto_tree_add_item(field_tree, hf_mysql_exec_field_second_b,
+										tvb, param_offset + 7, 4, ENC_LITTLE_ENDIAN);
+							}
+							param_offset += param_len;
+							break;
+						case 0xfe: /* FIELD_TYPE_STRING */
+							param_len = tvb_get_guint8(tvb, param_offset);
+							switch (param_len) {
+								case 0xfc: /* 252 - 64k chars */
+									param_offset += 1;
+									param_len32 = tvb_get_letohs(tvb, param_offset);
+									proto_tree_add_item(field_tree, hf_mysql_exec_field_string,
+											tvb, param_offset, 2, ENC_LITTLE_ENDIAN);
+									param_offset += param_len32 + 2;
+									break;
+								case 0xfd: /* 64k - 16M chars */
+									param_offset += 1;
+									param_len32 = tvb_get_letoh24(tvb, param_offset);
+									proto_tree_add_item(field_tree, hf_mysql_exec_field_string,
+											tvb, param_offset, 3, ENC_LITTLE_ENDIAN);
+									param_offset += param_len32 + 3;
+									break;
+								default: /* < 252 chars */
+									proto_tree_add_item(field_tree, hf_mysql_exec_field_string,
+											tvb, param_offset, 1, ENC_NA);
+									param_offset += param_len + 1;
+									break;
+							}
+							break;
+						default:
+							param_continue = 0;
+							break;
+					}
+					if (!param_continue) break;
+				}
+				offset = param_offset;
+			}
 		}
 #if 0
 /* FIXME: rest needs metadata about statement */
@@ -2242,6 +2348,71 @@ void proto_register_mysql(void)
 		{ "text", "mysql.row.text",
 		FT_STRING, BASE_NONE, NULL, 0x0,
 		"Field: row packet text", HFILL }},
+
+		{ &hf_mysql_exec_param,
+		{ "Parameter", "mysql.exec_param",
+		FT_NONE, BASE_NONE, NULL, 0x0,
+		NULL, HFILL }},
+
+		{ &hf_mysql_exec_unsigned,
+		{ "Unsigned", "mysql.exec.unsigned",
+		FT_UINT8, BASE_DEC, NULL, 0x0,
+		NULL, HFILL }},
+
+		{ &hf_mysql_exec_field_longlong,
+		{ "Value", "mysql.exec.field.longlong",
+		FT_INT64, BASE_DEC, NULL, 0x0,
+		NULL, HFILL }},
+
+		{ &hf_mysql_exec_field_string,
+		{ "Value", "mysql.exec.field.string",
+		FT_UINT_STRING, BASE_NONE, NULL, 0x0,
+		NULL, HFILL }},
+
+		{ &hf_mysql_exec_field_double,
+		{ "Value", "mysql.exec.field.double",
+		FT_DOUBLE, BASE_NONE, NULL, 0x0,
+		NULL, HFILL }},
+
+		{ &hf_mysql_exec_field_datetime_length,
+		{ "Length", "mysql.exec.field.datetime.length",
+		FT_INT8, BASE_DEC, NULL, 0x0,
+		NULL, HFILL }},
+
+		{ &hf_mysql_exec_field_year,
+		{ "Year", "mysql.exec.field.year",
+		FT_INT16, BASE_DEC, NULL, 0x0,
+		NULL, HFILL }},
+
+		{ &hf_mysql_exec_field_month,
+		{ "Month", "mysql.exec.field.month",
+		FT_INT8, BASE_DEC, NULL, 0x0,
+		NULL, HFILL }},
+
+		{ &hf_mysql_exec_field_day,
+		{ "Day", "mysql.exec.field.day",
+		FT_INT8, BASE_DEC, NULL, 0x0,
+		NULL, HFILL }},
+
+		{ &hf_mysql_exec_field_hour,
+		{ "Hour", "mysql.exec.field.hour",
+		FT_INT8, BASE_DEC, NULL, 0x0,
+		NULL, HFILL }},
+
+		{ &hf_mysql_exec_field_minute,
+		{ "Minute", "mysql.exec.field.minute",
+		FT_INT8, BASE_DEC, NULL, 0x0,
+		NULL, HFILL }},
+
+		{ &hf_mysql_exec_field_second,
+		{ "Second", "mysql.exec.field.second",
+		FT_INT8, BASE_DEC, NULL, 0x0,
+		NULL, HFILL }},
+
+		{ &hf_mysql_exec_field_second_b,
+		{ "Billionth of a second", "mysql.exec.field.secondb",
+		FT_INT32, BASE_DEC, NULL, 0x0,
+		NULL, HFILL }},
 	};
 
 	static gint *ett[]=
@@ -2254,7 +2425,8 @@ void proto_register_mysql(void)
 		&ett_stat,
 		&ett_request,
 		&ett_refresh,
-		&ett_field_flags
+		&ett_field_flags,
+		&ett_exec_param
 	};
 
 	module_t *mysql_module;
