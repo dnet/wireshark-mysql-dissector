@@ -193,6 +193,13 @@ static const value_string mysql_exec_flags_vals[] = {
 	{0, NULL}
 };
 
+/* decoding table: new_parameter_bound_flag */
+static const value_string mysql_new_parameter_bound_flag_vals[] = {
+	{0, "Subsequent call"},
+	{1, "First call or rebound"},
+	{0, NULL}
+};
+
 /* charset: pre-4.1 used the term 'charset', later changed to 'collation' */
 static const value_string mysql_charset_vals[] = {
 	{1,  "big5"},
@@ -479,6 +486,7 @@ static int hf_mysql_fld_set = -1;
 static int hf_mysql_fld_decimals = -1;
 static int hf_mysql_fld_default = -1;
 static int hf_mysql_row_text = -1;
+static int hf_mysql_new_parameter_bound_flag = -1;
 
 /* type constants */
 static const value_string type_constants[] =
@@ -919,6 +927,8 @@ mysql_dissect_request(tvbuff_t *tvb,packet_info *pinfo, int offset,
 	gint strlen;
 	proto_item *tf = NULL, *ti;
 	proto_item *req_tree = NULL;
+	gint stmt_id;
+	my_stmt_data_t *stmt_data;
 
 	if (tree) {
 		tf = proto_tree_add_item(tree, hf_mysql_request, tvb, offset, 1, ENC_NA);
@@ -1088,6 +1098,7 @@ mysql_dissect_request(tvbuff_t *tvb,packet_info *pinfo, int offset,
 
 	case MYSQL_STMT_EXECUTE:
 		proto_tree_add_item(req_tree, hf_mysql_stmt_id, tvb, offset, 4, ENC_LITTLE_ENDIAN);
+		stmt_id = tvb_get_letohl(tvb, offset);
 		offset += 4;
 
 		if (conn_data->major_version >= 5) {
@@ -1100,6 +1111,12 @@ mysql_dissect_request(tvbuff_t *tvb,packet_info *pinfo, int offset,
 		proto_tree_add_item(req_tree, hf_mysql_exec_iter, tvb, offset, 4, ENC_LITTLE_ENDIAN);
 		offset += 4;
 
+		stmt_data = g_hash_table_lookup(conn_data->stmts, &stmt_id);
+		if (stmt_data != NULL && stmt_data->nparam != 0) {
+			offset += (stmt_data->nparam + 7) / 8;
+			proto_tree_add_item(req_tree, hf_mysql_new_parameter_bound_flag, tvb, offset, 1, ENC_NA);
+			offset += 1;
+		}
 #if 0
 /* FIXME: rest needs metadata about statement */
 #else
@@ -2054,6 +2071,11 @@ void proto_register_mysql(void)
 		{ &hf_mysql_exec_flags5,
 		{ "Flags", "mysql.exec_flags",
 		FT_UINT8, BASE_DEC, VALS(mysql_exec_flags_vals), 0x0,
+		NULL, HFILL }},
+
+		{ &hf_mysql_new_parameter_bound_flag,
+		{ "New parameter bound flag", "mysql.new_parameter_bound_flag",
+		FT_UINT8, BASE_DEC, VALS(mysql_new_parameter_bound_flag_vals), 0x0,
 		NULL, HFILL }},
 
 		{ &hf_mysql_exec_iter,
