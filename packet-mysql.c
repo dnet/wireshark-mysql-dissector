@@ -501,6 +501,7 @@ static int hf_mysql_exec_field_hour = -1;
 static int hf_mysql_exec_field_minute = -1;
 static int hf_mysql_exec_field_second = -1;
 static int hf_mysql_exec_field_second_b = -1;
+static int hf_mysql_exec_field_long = -1;
 
 /* type constants */
 static const value_string type_constants[] =
@@ -1148,6 +1149,11 @@ mysql_dissect_request(tvbuff_t *tvb,packet_info *pinfo, int offset,
 					proto_tree_add_item(field_tree, hf_mysql_exec_unsigned, tvb, offset, 1, ENC_NA);
 					offset += 1; /* signedness */
 					switch (param_type) {
+						case 0x03: /* FIELD_TYPE_LONG */
+							proto_tree_add_item(field_tree, hf_mysql_exec_field_long,
+									tvb, param_offset, 4, ENC_LITTLE_ENDIAN);
+							param_offset += 4;
+							break;
 						case 0x05: /* FIELD_TYPE_DOUBLE */
 							proto_tree_add_item(field_tree, hf_mysql_exec_field_double,
 									tvb, param_offset, 8, ENC_LITTLE_ENDIAN);
@@ -1190,6 +1196,7 @@ mysql_dissect_request(tvbuff_t *tvb,packet_info *pinfo, int offset,
 							}
 							param_offset += param_len;
 							break;
+						case 0xfd: /* FIELD_TYPE_VAR_STRING */
 						case 0xfe: /* FIELD_TYPE_STRING */
 							param_len = tvb_get_guint8(tvb, param_offset);
 							switch (param_len) {
@@ -2411,6 +2418,11 @@ void proto_register_mysql(void)
 
 		{ &hf_mysql_exec_field_second_b,
 		{ "Billionth of a second", "mysql.exec.field.secondb",
+		FT_INT32, BASE_DEC, NULL, 0x0,
+		NULL, HFILL }},
+
+		{ &hf_mysql_exec_field_long,
+		{ "Value", "mysql.exec.field.long",
 		FT_INT32, BASE_DEC, NULL, 0x0,
 		NULL, HFILL }},
 	};
