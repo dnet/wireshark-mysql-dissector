@@ -616,6 +616,9 @@ static int mysql_dissect_result_header(tvbuff_t *tvb, packet_info *pinfo, int of
 static int mysql_dissect_field_packet(tvbuff_t *tvb, int offset, proto_tree *tree, mysql_conn_data_t *conn_data);
 static int mysql_dissect_row_packet(tvbuff_t *tvb, int offset, proto_tree *tree);
 static int mysql_dissect_response_prepare(tvbuff_t *tvb, int offset, proto_tree *tree, mysql_conn_data_t *conn_data);
+static void mysql_dissect_exec_string(tvbuff_t *tvb, int *param_offset, proto_item *field_tree);
+static void mysql_dissect_exec_datetime(tvbuff_t *tvb, int *param_offset, proto_item *field_tree);
+static char mysql_dissect_exec_param(proto_item *req_tree, tvbuff_t *tvb, int *offset, int *param_offset);
 static gint my_tvb_strsize(tvbuff_t *tvb, int offset);
 static int tvb_get_fle(tvbuff_t *tvb, int offset, guint64 *res, guint8 *is_null);
 
@@ -940,6 +943,122 @@ mysql_dissect_login(tvbuff_t *tvb, packet_info *pinfo, int offset,
 }
 
 
+static void mysql_dissect_exec_string(tvbuff_t *tvb, int *param_offset, proto_item *field_tree) {
+	guint32 param_len32;
+	guint8 param_len = tvb_get_guint8(tvb, *param_offset);
+
+	switch (param_len) {
+		case 0xfc: /* 252 - 64k chars */
+			*param_offset += 1;
+			param_len32 = tvb_get_letohs(tvb, *param_offset);
+			proto_tree_add_item(field_tree, hf_mysql_exec_field_string,
+					tvb, *param_offset, 2, ENC_LITTLE_ENDIAN);
+			*param_offset += param_len32 + 2;
+			break;
+		case 0xfd: /* 64k - 16M chars */
+			*param_offset += 1;
+			param_len32 = tvb_get_letoh24(tvb, *param_offset);
+			proto_tree_add_item(field_tree, hf_mysql_exec_field_string,
+					tvb, *param_offset, 3, ENC_LITTLE_ENDIAN);
+			*param_offset += param_len32 + 3;
+			break;
+		default: /* < 252 chars */
+			proto_tree_add_item(field_tree, hf_mysql_exec_field_string,
+					tvb, *param_offset, 1, ENC_NA);
+			*param_offset += param_len + 1;
+			break;
+	}
+}
+
+static void mysql_dissect_exec_datetime(tvbuff_t *tvb, int *param_offset, proto_item *field_tree) {
+	guint8 param_len = tvb_get_guint8(tvb, *param_offset);
+	proto_tree_add_item(field_tree, hf_mysql_exec_field_datetime_length,
+			tvb, *param_offset, 1, ENC_NA);
+	*param_offset += 1;
+	if (param_len >= 2) {
+		proto_tree_add_item(field_tree, hf_mysql_exec_field_year,
+				tvb, *param_offset, 2, ENC_LITTLE_ENDIAN);
+	}
+	if (param_len >= 4) {
+		proto_tree_add_item(field_tree, hf_mysql_exec_field_month,
+				tvb, *param_offset + 2, 1, ENC_NA);
+		proto_tree_add_item(field_tree, hf_mysql_exec_field_day,
+				tvb, *param_offset + 3, 1, ENC_NA);
+	}
+	if (param_len >= 7) {
+		proto_tree_add_item(field_tree, hf_mysql_exec_field_hour,
+				tvb, *param_offset + 4, 1, ENC_NA);
+		proto_tree_add_item(field_tree, hf_mysql_exec_field_minute,
+				tvb, *param_offset + 5, 1, ENC_NA);
+		proto_tree_add_item(field_tree, hf_mysql_exec_field_second,
+				tvb, *param_offset + 6, 1, ENC_NA);
+	}
+	if (param_len >= 11) {
+		proto_tree_add_item(field_tree, hf_mysql_exec_field_second_b,
+				tvb, *param_offset + 7, 4, ENC_LITTLE_ENDIAN);
+	}
+	*param_offset += param_len;
+}
+
+static char mysql_dissect_exec_param(proto_item *req_tree, tvbuff_t *tvb, int *offset, int *param_offset) {
+	guint8 param_type;
+	proto_item *tf;
+	proto_item *field_tree;
+
+	tf = proto_tree_add_item(req_tree, hf_mysql_exec_param, tvb, *offset, 2, ENC_NA);
+	field_tree = proto_item_add_subtree(tf, ett_stat);
+	proto_tree_add_item(field_tree, hf_mysql_fld_type, tvb, *offset, 1, ENC_NA);
+	param_type = tvb_get_guint8(tvb, *offset);
+	*offset += 1; /* type */
+	proto_tree_add_item(field_tree, hf_mysql_exec_unsigned, tvb, *offset, 1, ENC_NA);
+	*offset += 1; /* signedness */
+	switch (param_type) {
+		case 0x01: /* FIELD_TYPE_TINY */
+			proto_tree_add_item(field_tree, hf_mysql_exec_field_tiny,
+					tvb, *param_offset, 1, ENC_NA);
+			*param_offset += 1;
+			break;
+		case 0x02: /* FIELD_TYPE_SHORT */
+			proto_tree_add_item(field_tree, hf_mysql_exec_field_short,
+					tvb, *param_offset, 2, ENC_LITTLE_ENDIAN);
+			*param_offset += 2;
+			break;
+		case 0x03: /* FIELD_TYPE_LONG */
+			proto_tree_add_item(field_tree, hf_mysql_exec_field_long,
+					tvb, *param_offset, 4, ENC_LITTLE_ENDIAN);
+			*param_offset += 4;
+			break;
+		case 0x04: /* FIELD_TYPE_FLOAT */
+			proto_tree_add_item(field_tree, hf_mysql_exec_field_float,
+					tvb, *param_offset, 4, ENC_LITTLE_ENDIAN);
+			*param_offset += 4;
+			break;
+		case 0x05: /* FIELD_TYPE_DOUBLE */
+			proto_tree_add_item(field_tree, hf_mysql_exec_field_double,
+					tvb, *param_offset, 8, ENC_LITTLE_ENDIAN);
+			*param_offset += 8;
+			break;
+		case 0x06: /* FIELD_TYPE_NULL */
+			break;
+		case 0x08: /* FIELD_TYPE_LONGLONG */
+			proto_tree_add_item(field_tree, hf_mysql_exec_field_longlong,
+					tvb, *param_offset, 8, ENC_LITTLE_ENDIAN);
+			*param_offset += 8;
+			break;
+		case 0x0a: /* FIELD_TYPE_DATE */
+		case 0x0c: /* FIELD_TYPE_DATETIME */
+			mysql_dissect_exec_datetime(tvb, param_offset, field_tree);
+			break;
+		case 0xfd: /* FIELD_TYPE_VAR_STRING */
+		case 0xfe: /* FIELD_TYPE_STRING */
+			mysql_dissect_exec_string(tvb, param_offset, field_tree);
+			break;
+		default:
+			return 0;
+	}
+	return 1;
+}
+
 static int
 mysql_dissect_request(tvbuff_t *tvb,packet_info *pinfo, int offset,
 		      proto_tree *tree, mysql_conn_data_t *conn_data)
@@ -950,8 +1069,6 @@ mysql_dissect_request(tvbuff_t *tvb,packet_info *pinfo, int offset,
 	proto_item *req_tree = NULL;
 	gint stmt_id;
 	my_stmt_data_t *stmt_data;
-	guint8 stmt_bound, param_type, param_len, param_continue;
-	guint32 param_len32;
 	int stmt_pos, param_offset;
 
 	if (tree) {
@@ -1137,116 +1254,15 @@ mysql_dissect_request(tvbuff_t *tvb,packet_info *pinfo, int offset,
 
 		stmt_data = g_hash_table_lookup(conn_data->stmts, &stmt_id);
 		if (stmt_data != NULL && stmt_data->nparam != 0) {
+			guint8 stmt_bound;
 			offset += (stmt_data->nparam + 7) / 8;
 			proto_tree_add_item(req_tree, hf_mysql_new_parameter_bound_flag, tvb, offset, 1, ENC_NA);
 			stmt_bound = tvb_get_guint8(tvb, offset);
 			offset += 1;
 			if (stmt_bound == 1) {
 				param_offset = offset + stmt_data->nparam * 2;
-				param_continue = 1;
 				for (stmt_pos = 0; stmt_pos < stmt_data->nparam; stmt_pos++) {
-					proto_item *tf;
-					proto_item *field_tree;
-					tf = proto_tree_add_item(req_tree, hf_mysql_exec_param, tvb, offset, 2, ENC_NA);
-					field_tree = proto_item_add_subtree(tf, ett_stat);
-					proto_tree_add_item(field_tree, hf_mysql_fld_type, tvb, offset, 1, ENC_NA);
-					param_type = tvb_get_guint8(tvb, offset);
-					offset += 1; /* type */
-					proto_tree_add_item(field_tree, hf_mysql_exec_unsigned, tvb, offset, 1, ENC_NA);
-					offset += 1; /* signedness */
-					switch (param_type) {
-						case 0x01: /* FIELD_TYPE_TINY */
-							proto_tree_add_item(field_tree, hf_mysql_exec_field_tiny,
-									tvb, param_offset, 1, ENC_NA);
-							param_offset += 1;
-							break;
-						case 0x02: /* FIELD_TYPE_SHORT */
-							proto_tree_add_item(field_tree, hf_mysql_exec_field_short,
-									tvb, param_offset, 2, ENC_LITTLE_ENDIAN);
-							param_offset += 2;
-							break;
-						case 0x03: /* FIELD_TYPE_LONG */
-							proto_tree_add_item(field_tree, hf_mysql_exec_field_long,
-									tvb, param_offset, 4, ENC_LITTLE_ENDIAN);
-							param_offset += 4;
-							break;
-						case 0x04: /* FIELD_TYPE_FLOAT */
-							proto_tree_add_item(field_tree, hf_mysql_exec_field_float,
-									tvb, param_offset, 4, ENC_LITTLE_ENDIAN);
-							param_offset += 4;
-							break;
-						case 0x05: /* FIELD_TYPE_DOUBLE */
-							proto_tree_add_item(field_tree, hf_mysql_exec_field_double,
-									tvb, param_offset, 8, ENC_LITTLE_ENDIAN);
-							param_offset += 8;
-							break;
-						case 0x06: /* FIELD_TYPE_NULL */
-							break;
-						case 0x08: /* FIELD_TYPE_LONGLONG */
-							proto_tree_add_item(field_tree, hf_mysql_exec_field_longlong,
-									tvb, param_offset, 8, ENC_LITTLE_ENDIAN);
-							param_offset += 8;
-							break;
-						case 0x0a: /* FIELD_TYPE_DATE */
-						case 0x0c: /* FIELD_TYPE_DATETIME */
-							proto_tree_add_item(field_tree, hf_mysql_exec_field_datetime_length,
-									tvb, param_offset, 1, ENC_NA);
-							param_len = tvb_get_guint8(tvb, param_offset);
-							param_offset += 1;
-							if (param_len >= 2) {
-								proto_tree_add_item(field_tree, hf_mysql_exec_field_year,
-										tvb, param_offset, 2, ENC_LITTLE_ENDIAN);
-							}
-							if (param_len >= 4) {
-								proto_tree_add_item(field_tree, hf_mysql_exec_field_month,
-										tvb, param_offset + 2, 1, ENC_NA);
-								proto_tree_add_item(field_tree, hf_mysql_exec_field_day,
-										tvb, param_offset + 3, 1, ENC_NA);
-							}
-							if (param_len >= 7) {
-								proto_tree_add_item(field_tree, hf_mysql_exec_field_hour,
-										tvb, param_offset + 4, 1, ENC_NA);
-								proto_tree_add_item(field_tree, hf_mysql_exec_field_minute,
-										tvb, param_offset + 5, 1, ENC_NA);
-								proto_tree_add_item(field_tree, hf_mysql_exec_field_second,
-										tvb, param_offset + 6, 1, ENC_NA);
-							}
-							if (param_len >= 11) {
-								proto_tree_add_item(field_tree, hf_mysql_exec_field_second_b,
-										tvb, param_offset + 7, 4, ENC_LITTLE_ENDIAN);
-							}
-							param_offset += param_len;
-							break;
-						case 0xfd: /* FIELD_TYPE_VAR_STRING */
-						case 0xfe: /* FIELD_TYPE_STRING */
-							param_len = tvb_get_guint8(tvb, param_offset);
-							switch (param_len) {
-								case 0xfc: /* 252 - 64k chars */
-									param_offset += 1;
-									param_len32 = tvb_get_letohs(tvb, param_offset);
-									proto_tree_add_item(field_tree, hf_mysql_exec_field_string,
-											tvb, param_offset, 2, ENC_LITTLE_ENDIAN);
-									param_offset += param_len32 + 2;
-									break;
-								case 0xfd: /* 64k - 16M chars */
-									param_offset += 1;
-									param_len32 = tvb_get_letoh24(tvb, param_offset);
-									proto_tree_add_item(field_tree, hf_mysql_exec_field_string,
-											tvb, param_offset, 3, ENC_LITTLE_ENDIAN);
-									param_offset += param_len32 + 3;
-									break;
-								default: /* < 252 chars */
-									proto_tree_add_item(field_tree, hf_mysql_exec_field_string,
-											tvb, param_offset, 1, ENC_NA);
-									param_offset += param_len + 1;
-									break;
-							}
-							break;
-						default:
-							param_continue = 0;
-							break;
-					}
-					if (!param_continue) break;
+					if (!mysql_dissect_exec_param(req_tree, tvb, &offset, &param_offset)) break;
 				}
 				offset = param_offset;
 			}
