@@ -662,12 +662,15 @@ dissect_mysql_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
 		conn_data->clnt_caps= 0;
 		conn_data->clnt_caps_ext= 0;
 		conn_data->state= UNDEFINED;
-		conn_data->stmts= g_hash_table_new(g_int_hash, g_int_equal);
+		conn_data->stmts= NULL;
 #ifdef CTDEBUG
 		conn_data->generation= 0;
 #endif
 		conn_data->major_version= 0;
 		conversation_add_proto_data(conversation, proto_mysql, conn_data);
+	}
+	if (conn_data->stmts == NULL) {
+		conn_data->stmts = g_hash_table_new(g_int_hash, g_int_equal);
 	}
 
 	mysql_frame_data_p = p_get_proto_data(pinfo->fd, proto_mysql);
