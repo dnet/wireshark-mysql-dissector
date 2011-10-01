@@ -1086,7 +1086,7 @@ static char mysql_dissect_exec_param(proto_item *req_tree, tvbuff_t *tvb, int *o
 		}
 		dissector_index++;
 	}
-	return 1;
+	return 0;
 }
 
 static int
