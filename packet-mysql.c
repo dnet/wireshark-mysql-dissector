@@ -1680,12 +1680,13 @@ static int
 mysql_dissect_response_prepare(tvbuff_t *tvb, int offset, proto_tree *tree, mysql_conn_data_t *conn_data)
 {
 	my_stmt_data_t *stmt_data;
-	gint stmt_id;
+	gint *stmt_id; /* XXX */
 
 	/* 0, marker for OK packet */
 	offset += 1;
 	proto_tree_add_item(tree, hf_mysql_stmt_id, tvb, offset, 4, ENC_LITTLE_ENDIAN);
-	stmt_id = tvb_get_letohl(tvb, offset);
+	stmt_id = se_alloc(sizeof(gint));
+	(*stmt_id) = tvb_get_letohl(tvb, offset);
 	offset += 4;
 	proto_tree_add_item(tree, hf_mysql_num_fields, tvb, offset, 2, ENC_LITTLE_ENDIAN);
 	conn_data->stmt_num_fields = tvb_get_letohs(tvb, offset);
@@ -1694,7 +1695,7 @@ mysql_dissect_response_prepare(tvbuff_t *tvb, int offset, proto_tree *tree, mysq
 	conn_data->stmt_num_params = tvb_get_letohs(tvb, offset);
 	stmt_data = se_alloc(sizeof(struct my_stmt_data));
 	stmt_data->nparam = conn_data->stmt_num_params;
-	g_hash_table_replace(conn_data->stmts, &stmt_id, stmt_data);
+	g_hash_table_replace(conn_data->stmts, stmt_id, stmt_data);
 	offset += 2;
 	/* Filler */
 	offset += 1;
