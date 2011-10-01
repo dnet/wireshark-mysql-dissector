@@ -631,6 +631,8 @@ static void mysql_dissect_exec_double(tvbuff_t *tvb, int *param_offset, proto_it
 static void mysql_dissect_exec_longlong(tvbuff_t *tvb, int *param_offset, proto_item *field_tree);
 static void mysql_dissect_exec_null(tvbuff_t *tvb, int *param_offset, proto_item *field_tree);
 static char mysql_dissect_exec_param(proto_item *req_tree, tvbuff_t *tvb, int *offset, int *param_offset);
+static void mysql_dissect_exec_primitive(tvbuff_t *tvb, int *param_offset,
+		proto_item *field_tree, const int hfindex, const int offset);
 static gint my_tvb_strsize(tvbuff_t *tvb, int offset);
 static int tvb_get_fle(tvbuff_t *tvb, int offset, guint64 *res, guint8 *is_null);
 
@@ -1027,40 +1029,35 @@ static void mysql_dissect_exec_datetime(tvbuff_t *tvb, int *param_offset, proto_
 	*param_offset += param_len;
 }
 
+static void mysql_dissect_exec_primitive(tvbuff_t *tvb, int *param_offset,
+		proto_item *field_tree, const int hfindex, const int offset) {
+	proto_tree_add_item(field_tree, hfindex, tvb,
+			*param_offset, offset, ENC_LITTLE_ENDIAN);
+	*param_offset += offset;
+}
+
 static void mysql_dissect_exec_tiny(tvbuff_t *tvb, int *param_offset, proto_item *field_tree) {
-	proto_tree_add_item(field_tree, hf_mysql_exec_field_tiny,
-			tvb, *param_offset, 1, ENC_NA);
-	*param_offset += 1;
+	mysql_dissect_exec_primitive(tvb, param_offset, field_tree, hf_mysql_exec_field_tiny, 1);
 }
 
 static void mysql_dissect_exec_short(tvbuff_t *tvb, int *param_offset, proto_item *field_tree) {
-	proto_tree_add_item(field_tree, hf_mysql_exec_field_short,
-			tvb, *param_offset, 2, ENC_LITTLE_ENDIAN);
-	*param_offset += 2;
+	mysql_dissect_exec_primitive(tvb, param_offset, field_tree, hf_mysql_exec_field_short, 2);
 }
 
 static void mysql_dissect_exec_long(tvbuff_t *tvb, int *param_offset, proto_item *field_tree) {
-	proto_tree_add_item(field_tree, hf_mysql_exec_field_long,
-			tvb, *param_offset, 4, ENC_LITTLE_ENDIAN);
-	*param_offset += 4;
+	mysql_dissect_exec_primitive(tvb, param_offset, field_tree, hf_mysql_exec_field_long, 4);
 }
 
 static void mysql_dissect_exec_float(tvbuff_t *tvb, int *param_offset, proto_item *field_tree) {
-	proto_tree_add_item(field_tree, hf_mysql_exec_field_float,
-			tvb, *param_offset, 4, ENC_LITTLE_ENDIAN);
-	*param_offset += 4;
+	mysql_dissect_exec_primitive(tvb, param_offset, field_tree, hf_mysql_exec_field_float, 4);
 }
 
 static void mysql_dissect_exec_double(tvbuff_t *tvb, int *param_offset, proto_item *field_tree) {
-	proto_tree_add_item(field_tree, hf_mysql_exec_field_double,
-			tvb, *param_offset, 8, ENC_LITTLE_ENDIAN);
-	*param_offset += 8;
+	mysql_dissect_exec_primitive(tvb, param_offset, field_tree, hf_mysql_exec_field_double, 8);
 }
 
 static void mysql_dissect_exec_longlong(tvbuff_t *tvb, int *param_offset, proto_item *field_tree) {
-	proto_tree_add_item(field_tree, hf_mysql_exec_field_longlong,
-			tvb, *param_offset, 8, ENC_LITTLE_ENDIAN);
-	*param_offset += 8;
+	mysql_dissect_exec_primitive(tvb, param_offset, field_tree, hf_mysql_exec_field_longlong, 8);
 }
 
 static void mysql_dissect_exec_null(tvbuff_t *tvb, int *param_offset, proto_item *field_tree) {
