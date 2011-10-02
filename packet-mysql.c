@@ -658,6 +658,7 @@ static const mysql_exec_dissector_t mysql_exec_dissectors[] = {
 	{ 0x0a, 0, mysql_dissect_exec_datetime },
 	{ 0x0b, 0, mysql_dissect_exec_time },
 	{ 0x0c, 0, mysql_dissect_exec_datetime },
+	{ 0xf6, 0, mysql_dissect_exec_string },
 	{ 0xfd, 0, mysql_dissect_exec_string },
 	{ 0xfe, 0, mysql_dissect_exec_string },
 	{ 0x00, 0, NULL },
