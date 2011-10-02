@@ -200,6 +200,13 @@ static const value_string mysql_new_parameter_bound_flag_vals[] = {
 	{0, NULL}
 };
 
+/* decoding table: exec_time_sign */
+static const value_string mysql_exec_time_sign_vals[] = {
+	{0, "Positive"},
+	{1, "Negative"},
+	{0, NULL}
+};
+
 /* charset: pre-4.1 used the term 'charset', later changed to 'collation' */
 static const value_string mysql_charset_vals[] = {
 	{1,  "big5"},
@@ -505,6 +512,9 @@ static int hf_mysql_exec_field_long = -1;
 static int hf_mysql_exec_field_tiny = -1;
 static int hf_mysql_exec_field_short = -1;
 static int hf_mysql_exec_field_float = -1;
+static int hf_mysql_exec_field_time_length = -1;
+static int hf_mysql_exec_field_time_sign = -1;
+static int hf_mysql_exec_field_time_days = -1;
 
 /* type constants */
 static const value_string type_constants[] =
@@ -633,6 +643,7 @@ static void mysql_dissect_exec_null(tvbuff_t *tvb, int *param_offset, proto_item
 static char mysql_dissect_exec_param(proto_item *req_tree, tvbuff_t *tvb, int *offset, int *param_offset);
 static void mysql_dissect_exec_primitive(tvbuff_t *tvb, int *param_offset,
 		proto_item *field_tree, const int hfindex, const int offset);
+static void mysql_dissect_exec_time(tvbuff_t *tvb, int *param_offset, proto_item *field_tree);
 static gint my_tvb_strsize(tvbuff_t *tvb, int offset);
 static int tvb_get_fle(tvbuff_t *tvb, int offset, guint64 *res, guint8 *is_null);
 
@@ -645,6 +656,7 @@ static const mysql_exec_dissector_t mysql_exec_dissectors[] = {
 	{ 0x06, 0, mysql_dissect_exec_null },
 	{ 0x08, 0, mysql_dissect_exec_longlong },
 	{ 0x0a, 0, mysql_dissect_exec_datetime },
+	{ 0x0b, 0, mysql_dissect_exec_time },
 	{ 0x0c, 0, mysql_dissect_exec_datetime },
 	{ 0xfd, 0, mysql_dissect_exec_string },
 	{ 0xfe, 0, mysql_dissect_exec_string },
@@ -997,6 +1009,34 @@ static void mysql_dissect_exec_string(tvbuff_t *tvb, int *param_offset, proto_it
 			*param_offset += param_len + 1;
 			break;
 	}
+}
+
+static void mysql_dissect_exec_time(tvbuff_t *tvb, int *param_offset, proto_item *field_tree) {
+	guint8 param_len = tvb_get_guint8(tvb, *param_offset);
+	proto_tree_add_item(field_tree, hf_mysql_exec_field_time_length,
+			tvb, *param_offset, 1, ENC_NA);
+	*param_offset += 1;
+	if (param_len >= 1) {
+		proto_tree_add_item(field_tree, hf_mysql_exec_field_time_sign,
+				tvb, *param_offset, 1, ENC_NA);
+	}
+	if (param_len >= 5) {
+		proto_tree_add_item(field_tree, hf_mysql_exec_field_time_days,
+				tvb, *param_offset + 1, 4, ENC_LITTLE_ENDIAN);
+	}
+	if (param_len >= 8) {
+		proto_tree_add_item(field_tree, hf_mysql_exec_field_hour,
+				tvb, *param_offset + 5, 1, ENC_NA);
+		proto_tree_add_item(field_tree, hf_mysql_exec_field_minute,
+				tvb, *param_offset + 6, 1, ENC_NA);
+		proto_tree_add_item(field_tree, hf_mysql_exec_field_second,
+				tvb, *param_offset + 7, 1, ENC_NA);
+	}
+	if (param_len >= 12) {
+		proto_tree_add_item(field_tree, hf_mysql_exec_field_second_b,
+				tvb, *param_offset + 8, 4, ENC_LITTLE_ENDIAN);
+	}
+	*param_offset += param_len;
 }
 
 static void mysql_dissect_exec_datetime(tvbuff_t *tvb, int *param_offset, proto_item *field_tree) {
@@ -2507,6 +2547,21 @@ void proto_register_mysql(void)
 		{ &hf_mysql_exec_field_float,
 		{ "Value", "mysql.exec.field.float",
 		FT_FLOAT, BASE_NONE, NULL, 0x0,
+		NULL, HFILL }},
+
+		{ &hf_mysql_exec_field_time_length,
+		{ "Length", "mysql.exec.field.time.length",
+		FT_INT8, BASE_DEC, NULL, 0x0,
+		NULL, HFILL }},
+
+		{ &hf_mysql_exec_field_time_sign,
+		{ "Flags", "mysql.exec.field.time.sign",
+		FT_UINT8, BASE_DEC, VALS(mysql_exec_time_sign_vals), 0x0,
+		NULL, HFILL }},
+
+		{ &hf_mysql_exec_field_time_days,
+		{ "Days", "mysql.exec.field.time.days",
+		FT_INT32, BASE_DEC, NULL, 0x0,
 		NULL, HFILL }},
 	};
 
