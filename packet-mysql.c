@@ -1324,7 +1324,7 @@ mysql_dissect_request(tvbuff_t *tvb,packet_info *pinfo, int offset,
 		if (stmt_data != NULL) {
 			if (stmt_data->nparam != 0) {
 				guint8 stmt_bound;
-				offset += (stmt_data->nparam + 7) / 8;
+				offset += (stmt_data->nparam + 7) / 8; /* NULL bitmap */
 				proto_tree_add_item(req_tree, hf_mysql_new_parameter_bound_flag, tvb, offset, 1, ENC_NA);
 				stmt_bound = tvb_get_guint8(tvb, offset);
 				offset += 1;
