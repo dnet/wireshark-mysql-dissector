@@ -1792,7 +1792,7 @@ static int
 mysql_dissect_response_prepare(tvbuff_t *tvb, int offset, proto_tree *tree, mysql_conn_data_t *conn_data)
 {
 	my_stmt_data_t *stmt_data;
-	gint *stmt_id; /* XXX */
+	gint *stmt_id;
 
 	/* 0, marker for OK packet */
 	offset += 1;
