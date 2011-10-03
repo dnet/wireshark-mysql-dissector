@@ -1326,19 +1326,29 @@ mysql_dissect_request(tvbuff_t *tvb,packet_info *pinfo, int offset,
 		offset += 4;
 
 		stmt_data = g_hash_table_lookup(conn_data->stmts, &stmt_id);
-		if (stmt_data != NULL && stmt_data->nparam != 0) {
-			guint8 stmt_bound;
-			offset += (stmt_data->nparam + 7) / 8;
-			proto_tree_add_item(req_tree, hf_mysql_new_parameter_bound_flag, tvb, offset, 1, ENC_NA);
-			stmt_bound = tvb_get_guint8(tvb, offset);
-			offset += 1;
-			if (stmt_bound == 1) {
-				param_offset = offset + stmt_data->nparam * 2;
-				for (stmt_pos = 0; stmt_pos < stmt_data->nparam; stmt_pos++) {
-					if (!mysql_dissect_exec_param(req_tree, tvb, &offset, &param_offset)) break;
+		if (stmt_data != NULL) {
+			if (stmt_data->nparam != 0) {
+				guint8 stmt_bound;
+				offset += (stmt_data->nparam + 7) / 8;
+				proto_tree_add_item(req_tree, hf_mysql_new_parameter_bound_flag, tvb, offset, 1, ENC_NA);
+				stmt_bound = tvb_get_guint8(tvb, offset);
+				offset += 1;
+				if (stmt_bound == 1) {
+					param_offset = offset + stmt_data->nparam * 2;
+					for (stmt_pos = 0; stmt_pos < stmt_data->nparam; stmt_pos++) {
+						if (!mysql_dissect_exec_param(req_tree, tvb, &offset, &param_offset)) break;
+					}
+					offset = param_offset;
 				}
-				offset = param_offset;
 			}
+		} else {
+			strlen = tvb_reported_length_remaining(tvb, offset);
+			if (tree &&  strlen > 0) {
+				ti = proto_tree_add_item(req_tree, hf_mysql_payload, tvb, offset, strlen, ENC_NA);
+				expert_add_info_format(pinfo, ti, PI_UNDECODED, PI_WARN,
+						"PREPARE Response packet is needed to dissect the payload");
+			}
+			offset += strlen;
 		}
 #if 0
 /* FIXME: rest needs metadata about statement */
