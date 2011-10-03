@@ -986,7 +986,9 @@ mysql_dissect_login(tvbuff_t *tvb, packet_info *pinfo, int offset,
 
 static void mysql_dissect_exec_string(tvbuff_t *tvb, int *param_offset, proto_item *field_tree) {
 	guint32 param_len32;
-	guint8 param_len = tvb_get_guint8(tvb, *param_offset);
+	guint8 param_len;
+
+	param_len = tvb_get_guint8(tvb, *param_offset);
 
 	switch (param_len) {
 		case 0xfc: /* 252 - 64k chars */
@@ -1012,7 +1014,9 @@ static void mysql_dissect_exec_string(tvbuff_t *tvb, int *param_offset, proto_it
 }
 
 static void mysql_dissect_exec_time(tvbuff_t *tvb, int *param_offset, proto_item *field_tree) {
-	guint8 param_len = tvb_get_guint8(tvb, *param_offset);
+	guint8 param_len;
+
+	param_len = tvb_get_guint8(tvb, *param_offset);
 	proto_tree_add_item(field_tree, hf_mysql_exec_field_time_length,
 			tvb, *param_offset, 1, ENC_NA);
 	*param_offset += 1;
@@ -1040,7 +1044,9 @@ static void mysql_dissect_exec_time(tvbuff_t *tvb, int *param_offset, proto_item
 }
 
 static void mysql_dissect_exec_datetime(tvbuff_t *tvb, int *param_offset, proto_item *field_tree) {
-	guint8 param_len = tvb_get_guint8(tvb, *param_offset);
+	guint8 param_len;
+
+	param_len = tvb_get_guint8(tvb, *param_offset);
 	proto_tree_add_item(field_tree, hf_mysql_exec_field_datetime_length,
 			tvb, *param_offset, 1, ENC_NA);
 	*param_offset += 1;
