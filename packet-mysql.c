@@ -149,6 +149,9 @@
 #define MYSQL_CURSOR_TYPE_FOR_UPDATE 2
 #define MYSQL_CURSOR_TYPE_SCROLLABLE 4
 
+/* MySQL parameter flags -- used internally by the dissector */
+
+#define MYSQL_PARAM_FLAG_STREAMED 0x01
 
 /* decoding table: command */
 static const value_string mysql_command_vals[] = {
@@ -605,6 +608,7 @@ struct mysql_frame_data {
 typedef struct my_stmt_data
 {
 	guint16 nparam;
+	guint8* param_flags;
 } my_stmt_data_t;
 
 typedef struct mysql_exec_dissector {
@@ -640,7 +644,8 @@ static void mysql_dissect_exec_float(tvbuff_t *tvb, int *param_offset, proto_ite
 static void mysql_dissect_exec_double(tvbuff_t *tvb, int *param_offset, proto_item *field_tree);
 static void mysql_dissect_exec_longlong(tvbuff_t *tvb, int *param_offset, proto_item *field_tree);
 static void mysql_dissect_exec_null(tvbuff_t *tvb, int *param_offset, proto_item *field_tree);
-static char mysql_dissect_exec_param(proto_item *req_tree, tvbuff_t *tvb, int *offset, int *param_offset);
+static char mysql_dissect_exec_param(proto_item *req_tree, tvbuff_t *tvb, int *offset,
+		int *param_offset, guint8 param_flags, packet_info *pinfo);
 static void mysql_dissect_exec_primitive(tvbuff_t *tvb, int *param_offset,
 		proto_item *field_tree, const int hfindex, const int offset);
 static void mysql_dissect_exec_time(tvbuff_t *tvb, int *param_offset, proto_item *field_tree);
@@ -1110,7 +1115,8 @@ static void mysql_dissect_exec_null(tvbuff_t *tvb, int *param_offset, proto_item
 	if (tvb || param_offset || field_tree) {} /* ugly hack to avoid unused variables */
 }
 
-static char mysql_dissect_exec_param(proto_item *req_tree, tvbuff_t *tvb, int *offset, int *param_offset) {
+static char mysql_dissect_exec_param(proto_item *req_tree, tvbuff_t *tvb,
+		int *offset, int *param_offset, guint8 param_flags, packet_info *pinfo) {
 	guint8 param_type, param_unsigned;
 	proto_item *tf;
 	proto_item *field_tree;
@@ -1124,6 +1130,12 @@ static char mysql_dissect_exec_param(proto_item *req_tree, tvbuff_t *tvb, int *o
 	proto_tree_add_item(field_tree, hf_mysql_exec_unsigned, tvb, *offset, 1, ENC_NA);
 	param_unsigned = tvb_get_guint8(tvb, *offset);
 	*offset += 1; /* signedness */
+	if ((param_flags & MYSQL_PARAM_FLAG_STREAMED) == MYSQL_PARAM_FLAG_STREAMED) {
+		expert_add_info_format(pinfo, field_tree, PI_SEQUENCE, PI_CHAT,
+				"This parameter was streamed, its value "
+				"can be found in Send BLOB packets");
+		return 1;
+	}
 	while (mysql_exec_dissectors[dissector_index].dissector != NULL) {
 		if (mysql_exec_dissectors[dissector_index].type == param_type &&
 				mysql_exec_dissectors[dissector_index].unsigned_flag == param_unsigned) {
@@ -1291,7 +1303,16 @@ mysql_dissect_request(tvbuff_t *tvb,packet_info *pinfo, int offset,
 
 	case MYSQL_STMT_SEND_LONG_DATA:
 		proto_tree_add_item(req_tree, hf_mysql_stmt_id, tvb, offset, 4, ENC_LITTLE_ENDIAN);
+		stmt_id = tvb_get_letohl(tvb, offset);
 		offset += 4;
+
+		stmt_data = g_hash_table_lookup(conn_data->stmts, &stmt_id);
+		if (stmt_data != NULL) {
+			guint16 data_param = tvb_get_letohs(tvb, offset);
+			if (stmt_data->nparam > data_param) {
+				stmt_data->param_flags[data_param] |= MYSQL_PARAM_FLAG_STREAMED;
+			}
+		}
 
 		proto_tree_add_item(req_tree, hf_mysql_param, tvb, offset, 2, ENC_LITTLE_ENDIAN);
 		offset += 2;
@@ -1331,7 +1352,8 @@ mysql_dissect_request(tvbuff_t *tvb,packet_info *pinfo, int offset,
 				if (stmt_bound == 1) {
 					param_offset = offset + stmt_data->nparam * 2;
 					for (stmt_pos = 0; stmt_pos < stmt_data->nparam; stmt_pos++) {
-						if (!mysql_dissect_exec_param(req_tree, tvb, &offset, &param_offset)) break;
+						if (!mysql_dissect_exec_param(req_tree, tvb, &offset, &param_offset,
+									stmt_data->param_flags[stmt_pos], pinfo)) break;
 					}
 					offset = param_offset;
 				}
@@ -1793,6 +1815,7 @@ mysql_dissect_response_prepare(tvbuff_t *tvb, int offset, proto_tree *tree, mysq
 {
 	my_stmt_data_t *stmt_data;
 	gint *stmt_id;
+	int flagsize;
 
 	/* 0, marker for OK packet */
 	offset += 1;
@@ -1807,6 +1830,9 @@ mysql_dissect_response_prepare(tvbuff_t *tvb, int offset, proto_tree *tree, mysq
 	conn_data->stmt_num_params = tvb_get_letohs(tvb, offset);
 	stmt_data = se_alloc(sizeof(struct my_stmt_data));
 	stmt_data->nparam = conn_data->stmt_num_params;
+	flagsize = sizeof(guint8) * stmt_data->nparam;
+	stmt_data->param_flags = se_alloc(flagsize);
+	memset(stmt_data->param_flags, 0, flagsize);
 	g_hash_table_replace(conn_data->stmts, stmt_id, stmt_data);
 	offset += 2;
 	/* Filler */
