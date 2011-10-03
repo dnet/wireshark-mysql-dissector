@@ -712,15 +712,12 @@ dissect_mysql_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
 		conn_data->clnt_caps= 0;
 		conn_data->clnt_caps_ext= 0;
 		conn_data->state= UNDEFINED;
-		conn_data->stmts= NULL;
+		conn_data->stmts= g_hash_table_new(g_int_hash, g_int_equal);
 #ifdef CTDEBUG
 		conn_data->generation= 0;
 #endif
 		conn_data->major_version= 0;
 		conversation_add_proto_data(conversation, proto_mysql, conn_data);
-	}
-	if (conn_data->stmts == NULL) {
-		conn_data->stmts = g_hash_table_new(g_int_hash, g_int_equal);
 	}
 
 	mysql_frame_data_p = p_get_proto_data(pinfo->fd, proto_mysql);
@@ -1161,10 +1158,6 @@ mysql_dissect_request(tvbuff_t *tvb,packet_info *pinfo, int offset,
 	switch (opcode) {
 
 	case MYSQL_QUIT:
-		if (conn_data->stmts) {
-			g_hash_table_destroy(conn_data->stmts);
-			conn_data->stmts = NULL;
-		}
 		break;
 
 	case MYSQL_PROCESS_INFO:
@@ -1208,10 +1201,6 @@ mysql_dissect_request(tvbuff_t *tvb,packet_info *pinfo, int offset,
 		break;
 
 	case MYSQL_STMT_CLOSE:
-		if (conn_data->stmts) {
-			gint stmt = tvb_get_letohl(tvb, offset);
-			g_hash_table_remove(conn_data->stmts, &stmt);
-		}
 		proto_tree_add_item(req_tree, hf_mysql_stmt_id, tvb, offset, 4, ENC_LITTLE_ENDIAN);
 		offset += 4;
 		conn_data->state = REQUEST;
