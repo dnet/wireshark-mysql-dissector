@@ -1111,9 +1111,8 @@ static void mysql_dissect_exec_longlong(tvbuff_t *tvb, int *param_offset, proto_
 	mysql_dissect_exec_primitive(tvb, param_offset, field_tree, hf_mysql_exec_field_longlong, 8);
 }
 
-static void mysql_dissect_exec_null(tvbuff_t *tvb, int *param_offset, proto_item *field_tree) {
-	if (tvb || param_offset || field_tree) {} /* ugly hack to avoid unused variables */
-}
+static void mysql_dissect_exec_null(tvbuff_t *tvb _U_,
+		int *param_offset _U_, proto_item *field_tree _U_) {}
 
 static char mysql_dissect_exec_param(proto_item *req_tree, tvbuff_t *tvb,
 		int *offset, int *param_offset, guint8 param_flags, packet_info *pinfo) {
