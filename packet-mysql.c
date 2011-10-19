@@ -41,7 +41,6 @@
 # include "config.h"
 #endif
 
-#include <glib.h>
 #include <epan/packet.h>
 #include <epan/conversation.h>
 #include <epan/emem.h>
@@ -594,7 +593,7 @@ typedef struct mysql_conn_data
 	mysql_state_t state;
 	guint16 stmt_num_params;
 	guint16 stmt_num_fields;
-	GHashTable* stmts;
+	emem_tree_t* stmts;
 #ifdef CTDEBUG
 	guint32 generation;
 #endif
@@ -717,7 +716,7 @@ dissect_mysql_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
 		conn_data->clnt_caps= 0;
 		conn_data->clnt_caps_ext= 0;
 		conn_data->state= UNDEFINED;
-		conn_data->stmts= g_hash_table_new(g_int_hash, g_int_equal);
+		conn_data->stmts= se_tree_create(EMEM_TREE_TYPE_RED_BLACK, "PROTO_mysql_stmts");
 #ifdef CTDEBUG
 		conn_data->generation= 0;
 #endif
@@ -1154,7 +1153,7 @@ mysql_dissect_request(tvbuff_t *tvb,packet_info *pinfo, int offset,
 	gint strlen;
 	proto_item *tf = NULL, *ti;
 	proto_item *req_tree = NULL;
-	gint stmt_id;
+	guint32 stmt_id;
 	my_stmt_data_t *stmt_data;
 	int stmt_pos, param_offset;
 
@@ -1305,7 +1304,7 @@ mysql_dissect_request(tvbuff_t *tvb,packet_info *pinfo, int offset,
 		stmt_id = tvb_get_letohl(tvb, offset);
 		offset += 4;
 
-		stmt_data = g_hash_table_lookup(conn_data->stmts, &stmt_id);
+		stmt_data = se_tree_lookup32(conn_data->stmts, stmt_id);
 		if (stmt_data != NULL) {
 			guint16 data_param = tvb_get_letohs(tvb, offset);
 			if (stmt_data->nparam > data_param) {
@@ -1340,7 +1339,7 @@ mysql_dissect_request(tvbuff_t *tvb,packet_info *pinfo, int offset,
 		proto_tree_add_item(req_tree, hf_mysql_exec_iter, tvb, offset, 4, ENC_LITTLE_ENDIAN);
 		offset += 4;
 
-		stmt_data = g_hash_table_lookup(conn_data->stmts, &stmt_id);
+		stmt_data = se_tree_lookup32(conn_data->stmts, stmt_id);
 		if (stmt_data != NULL) {
 			if (stmt_data->nparam != 0) {
 				guint8 stmt_bound;
@@ -1813,14 +1812,13 @@ static int
 mysql_dissect_response_prepare(tvbuff_t *tvb, int offset, proto_tree *tree, mysql_conn_data_t *conn_data)
 {
 	my_stmt_data_t *stmt_data;
-	gint *stmt_id;
+	guint32 stmt_id;
 	int flagsize;
 
 	/* 0, marker for OK packet */
 	offset += 1;
 	proto_tree_add_item(tree, hf_mysql_stmt_id, tvb, offset, 4, ENC_LITTLE_ENDIAN);
-	stmt_id = se_alloc(sizeof(gint));
-	(*stmt_id) = tvb_get_letohl(tvb, offset);
+	stmt_id = tvb_get_letohl(tvb, offset);
 	offset += 4;
 	proto_tree_add_item(tree, hf_mysql_num_fields, tvb, offset, 2, ENC_LITTLE_ENDIAN);
 	conn_data->stmt_num_fields = tvb_get_letohs(tvb, offset);
@@ -1832,7 +1830,7 @@ mysql_dissect_response_prepare(tvbuff_t *tvb, int offset, proto_tree *tree, mysq
 	flagsize = sizeof(guint8) * stmt_data->nparam;
 	stmt_data->param_flags = se_alloc(flagsize);
 	memset(stmt_data->param_flags, 0, flagsize);
-	g_hash_table_replace(conn_data->stmts, stmt_id, stmt_data);
+	se_tree_insert32(conn_data->stmts, stmt_id, stmt_data);
 	offset += 2;
 	/* Filler */
 	offset += 1;
