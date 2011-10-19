@@ -5,7 +5,7 @@
  *
  * MySQL 4.1+ protocol by Axel Schwenke <axel@mysql.com>
  *
- * $Id: packet-mysql.c 39189 2011-09-29 22:15:43Z wmeier $
+ * $Id: packet-mysql.c 39426 2011-10-15 18:46:26Z wmeier $
  *
  * Wireshark - Network traffic analyzer
  * By Gerald Combs <gerald@wireshark.org>
@@ -864,7 +864,7 @@ mysql_dissect_greeting(tvbuff_t *tvb, packet_info *pinfo, int offset,
 	if (check_col(pinfo->cinfo, COL_INFO)) {
 		col_append_fstr(pinfo->cinfo, COL_INFO, " version=%s", tvb_get_ephemeral_string(tvb, offset, strlen));
 	}
-	proto_tree_add_item(greeting_tree, hf_mysql_version, tvb, offset, strlen, ENC_NA);
+	proto_tree_add_item(greeting_tree, hf_mysql_version, tvb, offset, strlen, ENC_ASCII|ENC_NA);
 	conn_data->major_version = 0;
 	for (ver_offset = 0; ver_offset < strlen; ver_offset++) {
 		guint8 ver_char = tvb_get_guint8(tvb, offset + ver_offset);
@@ -879,7 +879,7 @@ mysql_dissect_greeting(tvbuff_t *tvb, packet_info *pinfo, int offset,
 
 	/* salt string */
 	strlen = tvb_strsize(tvb,offset);
-	proto_tree_add_item(greeting_tree, hf_mysql_salt, tvb, offset, strlen, ENC_NA);
+	proto_tree_add_item(greeting_tree, hf_mysql_salt, tvb, offset, strlen, ENC_ASCII|ENC_NA);
 	offset += strlen;
 
 	/* rest is optional */
@@ -897,13 +897,13 @@ mysql_dissect_greeting(tvbuff_t *tvb, packet_info *pinfo, int offset,
 	offset = mysql_dissect_server_status(tvb, offset, greeting_tree);
 
 	/* 13 bytes unused */
-	proto_tree_add_item(greeting_tree, hf_mysql_unused, tvb, offset, 13, ENC_NA);
+	proto_tree_add_item(greeting_tree, hf_mysql_unused, tvb, offset, 13, ENC_ASCII|ENC_NA);
 	offset += 13;
 
 	/* 4.1+ server: rest of salt */
 	if (tvb_reported_length_remaining(tvb, offset)) {
 		strlen = tvb_strsize(tvb,offset);
-		proto_tree_add_item(greeting_tree, hf_mysql_salt2, tvb, offset, strlen, ENC_NA);
+		proto_tree_add_item(greeting_tree, hf_mysql_salt2, tvb, offset, strlen, ENC_ASCII|ENC_NA);
 		offset += strlen;
 	}
 
@@ -952,7 +952,7 @@ mysql_dissect_login(tvbuff_t *tvb, packet_info *pinfo, int offset,
 	if (check_col(pinfo->cinfo, COL_INFO)) {
 		col_append_fstr(pinfo->cinfo, COL_INFO, " user=%s", tvb_get_ephemeral_string(tvb, offset, strlen));
 	}
-	proto_tree_add_item(login_tree, hf_mysql_user, tvb, offset, strlen, ENC_NA);
+	proto_tree_add_item(login_tree, hf_mysql_user, tvb, offset, strlen, ENC_ASCII|ENC_NA);
 	offset += strlen;
 
 	/* rest is optional */
@@ -981,7 +981,7 @@ mysql_dissect_login(tvbuff_t *tvb, packet_info *pinfo, int offset,
 		if (check_col(pinfo->cinfo, COL_INFO)) {
 			col_append_fstr(pinfo->cinfo, COL_INFO, " db=%s", tvb_get_ephemeral_string(tvb, offset, strlen));
 		}
-		proto_tree_add_item(login_tree, hf_mysql_schema, tvb, offset, strlen, ENC_NA);
+		proto_tree_add_item(login_tree, hf_mysql_schema, tvb, offset, strlen, ENC_ASCII|ENC_NA);
 		offset += strlen;
 	}
 
@@ -1194,14 +1194,14 @@ mysql_dissect_request(tvbuff_t *tvb,packet_info *pinfo, int offset,
 	case MYSQL_CREATE_DB:
 	case MYSQL_DROP_DB:
 		strlen = my_tvb_strsize(tvb, offset);
-		proto_tree_add_item(req_tree, hf_mysql_schema, tvb, offset, strlen, ENC_NA);
+		proto_tree_add_item(req_tree, hf_mysql_schema, tvb, offset, strlen, ENC_ASCII|ENC_NA);
 		offset += strlen;
 		conn_data->state = RESPONSE_OK;
 		break;
 
 	case MYSQL_QUERY:
 		strlen = my_tvb_strsize(tvb, offset);
-		proto_tree_add_item(req_tree, hf_mysql_query, tvb, offset, strlen, ENC_NA);
+		proto_tree_add_item(req_tree, hf_mysql_query, tvb, offset, strlen, ENC_ASCII|ENC_NA);
 		if (mysql_showquery) {
 		        if (check_col(pinfo->cinfo, COL_INFO))
 		                col_append_fstr(pinfo->cinfo, COL_INFO, " { %s } ", tvb_get_ephemeral_string(tvb, offset, strlen));
@@ -1212,7 +1212,7 @@ mysql_dissect_request(tvbuff_t *tvb,packet_info *pinfo, int offset,
 
 	case MYSQL_STMT_PREPARE:
 		strlen = my_tvb_strsize(tvb, offset);
-		proto_tree_add_item(req_tree, hf_mysql_query, tvb, offset, strlen, ENC_NA);
+		proto_tree_add_item(req_tree, hf_mysql_query, tvb, offset, strlen, ENC_ASCII|ENC_NA);
 		offset += strlen;
 		conn_data->state = RESPONSE_PREPARE;
 		break;
@@ -1231,7 +1231,7 @@ mysql_dissect_request(tvbuff_t *tvb,packet_info *pinfo, int offset,
 
 	case MYSQL_FIELD_LIST:
 		strlen = my_tvb_strsize(tvb, offset);
-		proto_tree_add_item(req_tree, hf_mysql_table_name, tvb,  offset, strlen, ENC_NA);
+		proto_tree_add_item(req_tree, hf_mysql_table_name, tvb,  offset, strlen, ENC_ASCII|ENC_NA);
 		offset += strlen;
 		conn_data->state = RESPONSE_SHOW_FIELDS;
 		break;
@@ -1244,7 +1244,7 @@ mysql_dissect_request(tvbuff_t *tvb,packet_info *pinfo, int offset,
 
 	case MYSQL_CHANGE_USER:
 		strlen = tvb_strsize(tvb, offset);
-		proto_tree_add_item(req_tree, hf_mysql_user, tvb,  offset, strlen, ENC_NA);
+		proto_tree_add_item(req_tree, hf_mysql_user, tvb,  offset, strlen, ENC_ASCII|ENC_NA);
 		offset += strlen;
 
 		strlen = tvb_strsize(tvb, offset);
@@ -1252,7 +1252,7 @@ mysql_dissect_request(tvbuff_t *tvb,packet_info *pinfo, int offset,
 		offset += strlen;
 
 		strlen = my_tvb_strsize(tvb, offset);
-		proto_tree_add_item(req_tree, hf_mysql_schema, tvb, offset, strlen, ENC_NA);
+		proto_tree_add_item(req_tree, hf_mysql_schema, tvb, offset, strlen, ENC_ASCII|ENC_NA);
 		offset += strlen;
 
 		conn_data->state= RESPONSE_OK;
@@ -1392,7 +1392,7 @@ mysql_dissect_request(tvbuff_t *tvb,packet_info *pinfo, int offset,
 		/* binlog file name ? */
 		strlen = tvb_reported_length_remaining(tvb, offset);
 		if (tree &&  strlen > 0) {
-			proto_tree_add_item(req_tree, hf_mysql_binlog_file_name, tvb, offset, strlen, ENC_NA);
+			proto_tree_add_item(req_tree, hf_mysql_binlog_file_name, tvb, offset, strlen, ENC_ASCII|ENC_NA);
 		}
 		offset += strlen;
 
@@ -1483,7 +1483,7 @@ mysql_dissect_response(tvbuff_t *tvb, packet_info *pinfo, int offset,
 		switch (conn_data->state) {
 		case RESPONSE_MESSAGE:
 			if ((strlen = tvb_reported_length_remaining(tvb, offset))) {
-				proto_tree_add_item(tree, hf_mysql_message, tvb, offset, strlen, ENC_NA);
+				proto_tree_add_item(tree, hf_mysql_message, tvb, offset, strlen, ENC_ASCII|ENC_NA);
 				offset += strlen;
 			}
 			conn_data->state = REQUEST;
@@ -1533,11 +1533,11 @@ mysql_dissect_error_packet(tvbuff_t *tvb, packet_info *pinfo,
 	if (tvb_get_guint8(tvb, offset) == '#')
 	{
 		offset += 1;
-		proto_tree_add_item(tree, hf_mysql_sqlstate, tvb, offset, 5, ENC_NA);
+		proto_tree_add_item(tree, hf_mysql_sqlstate, tvb, offset, 5, ENC_ASCII|ENC_NA);
 		offset += 5;
 	}
 
-	proto_tree_add_item(tree, hf_mysql_error_string, tvb, offset, -1, ENC_NA);
+	proto_tree_add_item(tree, hf_mysql_error_string, tvb, offset, -1, ENC_ASCII|ENC_NA);
 	offset += tvb_reported_length_remaining(tvb, offset);
 
 	return offset;
@@ -1578,7 +1578,7 @@ mysql_dissect_ok_packet(tvbuff_t *tvb, packet_info *pinfo, int offset,
 	/* optional: message string */
 	if (tvb_reported_length_remaining(tvb, offset) > 0) {
 		strlen = tvb_reported_length_remaining(tvb, offset);
-		proto_tree_add_item(tree, hf_mysql_message, tvb, offset, strlen, ENC_NA);
+		proto_tree_add_item(tree, hf_mysql_message, tvb, offset, strlen, ENC_ASCII|ENC_NA);
 		offset += strlen;
 	}
 
