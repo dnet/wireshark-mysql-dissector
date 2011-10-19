@@ -1000,19 +1000,19 @@ static void mysql_dissect_exec_string(tvbuff_t *tvb, int *param_offset, proto_it
 			*param_offset += 1;
 			param_len32 = tvb_get_letohs(tvb, *param_offset);
 			proto_tree_add_item(field_tree, hf_mysql_exec_field_string,
-					tvb, *param_offset, 2, ENC_LITTLE_ENDIAN);
+					tvb, *param_offset, 2, ENC_ASCII | ENC_LITTLE_ENDIAN);
 			*param_offset += param_len32 + 2;
 			break;
 		case 0xfd: /* 64k - 16M chars */
 			*param_offset += 1;
 			param_len32 = tvb_get_letoh24(tvb, *param_offset);
 			proto_tree_add_item(field_tree, hf_mysql_exec_field_string,
-					tvb, *param_offset, 3, ENC_LITTLE_ENDIAN);
+					tvb, *param_offset, 3, ENC_ASCII | ENC_LITTLE_ENDIAN);
 			*param_offset += param_len32 + 3;
 			break;
 		default: /* < 252 chars */
 			proto_tree_add_item(field_tree, hf_mysql_exec_field_string,
-					tvb, *param_offset, 1, ENC_NA);
+					tvb, *param_offset, 1, ENC_ASCII | ENC_NA);
 			*param_offset += param_len + 1;
 			break;
 	}
